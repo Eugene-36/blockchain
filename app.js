@@ -7,7 +7,7 @@ const app = express();
 const { port } = require('./config');
 
 const connection = require('./db/connect');
-connection();
+
 // Handle corse issue
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -109,6 +109,15 @@ app.get('/free-endpoint', (req, res) => {
 app.get('/auth-endpoint', auth, (req, res) => {
   res.json({ message: 'You are authorized to access me' });
 });
-app.listen(port, () => {
-  console.log(`Server listening on port ${port}`);
-});
+const start = async () => {
+  try {
+    await connection();
+    app.listen(port, () => {
+      console.log(`Server listening on port ${port}`);
+    });
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+start();
