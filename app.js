@@ -2,12 +2,15 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('./db/userModel');
 const auth = require('./auth');
+// const { registerUser } = require('./controllers/auth');
+
 const express = require('express');
 const app = express();
 const { port } = require('./config');
 
 const connection = require('./db/connect');
-
+// routers
+const authRouter = require('./routes/auth');
 // Handle corse issue
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -32,73 +35,62 @@ app.get('/next', (req, res) => {
   res.send('Work');
 });
 // Register Endpoint
-app.post('/register', (req, res) => {
-  console.log('BODY', req.body);
-
-  bcrypt
-    .hash(req.body.password, 10)
-    .then((hashedPassword) => {
+app.use('/register', (req, res) => {
+  const registerUser = async () => {
+    try {
+      // Checking if email already exist
+      const existEmail = await User.findOne({ email: req.body.email });
+      if (existEmail) {
+        return res.status(400).json({ error: 'Email already exist' });
+      }
+      const hashPassword = await bcrypt.hash(req.body.password, 10);
       const user = new User({
         email: req.body.email,
-        password: hashedPassword,
+        password: hashPassword,
       });
-      user
-        .save()
-        .then((result) => {
-          res.status(201).send({
-            message: 'User Created Successfully',
-            result,
-          });
-        })
-        .catch((error) => {
-          res.status(500).send({
-            message: 'Error creating user',
-            error,
-          });
-        });
-    })
-    .catch((e) => {
-      res.status(500).send({
-        message: 'Password was not hashed successfully',
-        e,
-      });
-    });
+      await user.save();
+      res.status(201).json({ message: 'User registered successfully' });
+    } catch (error) {
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  };
+  registerUser();
 });
 // Login Endpoint
 app.post('/login', (req, res) => {
-  User.findOne({ email: req.body.email })
-    .then((user) => {
-      bcrypt
-        .compare(req.body.password, user.password)
-        .then((passwordCheck) => {
-          if (!passwordCheck) {
-            return res.status(404).send({
-              message: 'Passwords does not match',
-              error,
-            });
-          }
+  // =======
+  const loginUser = async () => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json('Please provide your email and password');
+    }
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json('Such user did not found');
+    }
 
-          const token = jwt.sign(
-            {
-              userId: user._id,
-              userEmail: user.email,
-            },
-            'RANDOM-TOKEN',
-            { expiresIn: '24h' }
-          );
-          res.status(200).send({
-            message: 'Login Successful',
-            email: user.email,
-            token,
-          });
-        })
-        .catch((e) => {
-          res.status(404).send({ message: 'Password does not match' });
-        });
-    })
-    .catch((e) => {
-      res.status(404).send({ message: 'Email not found' });
-    });
+    const bcryptPassword = await bcrypt.compare(password, user.password);
+    if (!bcryptPassword) {
+      return res.status(401).json('Invalid Credential');
+    }
+    if (bcryptPassword) {
+      const token = jwt.sign(
+        {
+          userId: user._id,
+          userEmail: user.email,
+        },
+        'RANDOM-TOKEN',
+        { expiresIn: '24h' }
+      );
+
+      return res.status(200).send({
+        message: 'Login Successful',
+        email: user.email,
+        token,
+      });
+    }
+  };
+  loginUser();
 });
 
 // free endpoint
